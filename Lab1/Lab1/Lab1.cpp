@@ -125,6 +125,11 @@ int main(int argc, char* argv[])
 
     //print_graph(graph);
     //find shortest path
+    if (graph[source] == NULL || graph[dest] == NULL) {
+        cout << "No path exists between " << source << " and " << dest << " within " << max_hop << " hops." << endl;
+        return 1;
+    }
+
     unordered_set<string> visited;
     vector<double> distance_list;
     vector<string> cur_path;
@@ -135,13 +140,13 @@ int main(int argc, char* argv[])
 
     dfs(graph[source], graph[dest], max_hop, 0, visited, distance_list, cur_path, path_list);
 
-    for (auto path : path_list) {
-        cout << "[" << path.first << ", " << path.second << "]" << endl;
-    }
+    //for (auto path : path_list) {
+    //    cout << "[" << path.first << ", " << path.second << "]" << endl;
+    //}
     //post processing
     if (distance_list.size() == 0) {
         cout << "No path exists between " << source << " and " << dest << " within " << max_hop << " hops." << endl;
-        return 1;
+        return 2;
     }
     
     double min = INT_MAX;
