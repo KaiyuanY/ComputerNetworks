@@ -21,7 +21,7 @@ double compute_edge_weight(Node* node1, Node* node2) {
 }
 
 void print_graph(unordered_map<string, Node*> graph) {
-    cout << "Graph: | Node = Score: - Adjacent Node 1 - Adjacent Node 2 - ... |" << endl;
+    cout << "Graph: | Node = Score: - (Adjacent Node 1) - (Adjacent Node 2) - ... |" << endl;
     for (auto n : graph) {
         string name = n.first;
         Node* node = n.second;
