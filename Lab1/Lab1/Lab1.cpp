@@ -21,12 +21,13 @@ double compute_edge_weight(Node* node1, Node* node2) {
 }
 
 void print_graph(unordered_map<string, Node*> graph) {
+    cout << "Graph: | Node = Score: - Adjacent Node 1 - Adjacent Node 2 - ... |" << endl;
     for (auto n : graph) {
         string name = n.first;
         Node* node = n.second;
-        cout << name << " = " << node->score << ": ";
+        cout << name << " = " << node->score << ":";
         for (Node* neighbour : node->neighbours) {
-            cout << neighbour->name << " - ";
+            cout << " - " << neighbour->name;
         }
         cout << endl;
     }
@@ -115,6 +116,10 @@ int main(int argc, char* argv[])
             ss >> node;
             ss >> score;
             //cout << "node = " << node << ", score = " << score << endl;
+            if (graph[node] == NULL) {
+                Node* n = new Node();
+                graph[node] = n;
+            }
             graph[node]->score = score;
         }
         score_file.close();
@@ -124,7 +129,8 @@ int main(int argc, char* argv[])
         return -2;
     }
 
-    //print_graph(graph);
+    print_graph(graph);
+    cout << endl << "Shortest Path Result:" << endl;
     //find shortest path
     if (graph[source] == NULL || graph[dest] == NULL) {
         cout << "No path exists between " << source << " and " << dest << " within " << max_hop << " hops." << endl;
@@ -142,7 +148,7 @@ int main(int argc, char* argv[])
     dfs(graph[source], graph[dest], max_hop, 0, visited, distance_list, cur_path, path_list);
 
     //for (auto path : path_list) {
-    //    cout << "[" << path.first << ", " << path.second << "]" << endl;
+        //cout << "[" << path.first << ", " << path.second << "]" << endl;
     //}
     //post processing
     if (distance_list.size() == 0) {
