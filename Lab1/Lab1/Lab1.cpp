@@ -129,10 +129,10 @@ int main(int argc, char* argv[])
         return -2;
     }
 
-    print_graph(graph);
-    cout << endl << "Shortest Path Result:" << endl;
+    //print_graph(graph);
+    //cout << endl << "Shortest Path Result:" << endl;
     //find shortest path
-    if (graph[source] == NULL || graph[dest] == NULL) {
+    if (graph[source] == NULL || graph[dest] == NULL || source == dest) {
         cout << "No path exists between " << source << " and " << dest << " within " << max_hop << " hops." << endl;
         return 1;
     }
