@@ -132,9 +132,12 @@ int main(int argc, char* argv[])
     //print_graph(graph);
     //cout << endl << "Shortest Path Result:" << endl;
     //find shortest path
-    if (graph[source] == NULL || graph[dest] == NULL || source == dest) {
+    if (graph[source] == NULL || graph[dest] == NULL) {
         cout << "No path exists between " << source << " and " << dest << " within " << max_hop << " hops." << endl;
         return 1;
+    }
+    if (source == dest) {
+        cout << 0.00 << endl;
     }
 
     unordered_set<string> visited;
