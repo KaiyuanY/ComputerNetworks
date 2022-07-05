@@ -177,7 +177,7 @@ void *handle_client_request(void *p_client_socket)
             //server A
             char udp_buffer[BUFFER_SIZE];
             strcpy(udp_buffer, name.c_str());
-            int len = sendto(serverA_send_fd, udp_buffer, BUFFER_SIZE, 
+            int len = sendto(serverA_send_fd, udp_buffer, BUFFER_SIZE, 0,
                             (sockaddr *)&senderA_addr, sizeof(senderA_addr));
             
             while(true)

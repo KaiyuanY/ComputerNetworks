@@ -32,7 +32,7 @@ int main()
 
     sender_addr.sin_family = AF_INET;
     sender_addr.sin_port = htons(main_server_port);
-    server_addr.sin_addr.s_addr = INADDR_ANY;
+    sender_addr.sin_addr.s_addr = INADDR_ANY;
 
     receiver_addr.sin_family = AF_INET;
     receiver_addr.sin_port = htons(local_port);
@@ -62,7 +62,7 @@ int main()
         else//send all records of the requested person
         {
             int max_serial = 0;
-            ifstream block_file("block1.txt");
+            std::ifstream block_file("block1.txt");
             std::string line;
             if(block_file.is_open())
             {
@@ -81,7 +81,7 @@ int main()
                     {
                         char send_buffer[BUFFER_SIZE];
                         strcpy(send_buffer, line.c_str());
-                        int len = sendto(sender_fd, send_buffer, BUFFER_SIZE, 
+                        int len = sendto(sender_fd, send_buffer, BUFFER_SIZE, 0,
                             (sockaddr *)&sender_addr, sizeof(sender_addr));
                         if(len < 0)
                         {
@@ -91,7 +91,7 @@ int main()
                 }
                 //after sending all records, send the max serial number
                 char send_buffer[BUFFER_SIZE];
-                std::string s = "# " + to_string(max_serial);
+                std::string s = "# " + std::to_string(max_serial);
                 strcpy(send_buffer, s.c_str());
             }
         }
