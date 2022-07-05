@@ -20,6 +20,14 @@ int port_udp_out = 24080;
 int port_serverA = 21080, port_serverB = 22080, port_serverC = 23080;
 int addr_size;
 
+struct Transaction
+{
+    int id;
+    std::string from;
+    std::string to;
+    int amount;
+}
+
 
 std::string encrypt(std::string line)
 {
@@ -106,6 +114,7 @@ std::string decrypt(std::string line)
 
 void *handle_client_request(void *p_client_socket)
 {
+
     int client_socket = *((int*)p_client_socket);
     delete (int*)p_client_socket;
 
@@ -140,8 +149,8 @@ void *handle_client_request(void *p_client_socket)
 
     while(true)
     {
-        // std::cout << "waiting for connection..." << std::endl;
-
+        unordered_map<int, Transaction> transactions;//or vector of transactions?
+                
         int size = sizeof(sockaddr_in);
         int server = accept(client_socket, (sockaddr *)&client_addr, (socklen_t*)&size);
 
@@ -173,9 +182,12 @@ void *handle_client_request(void *p_client_socket)
             //server A
             char udp_buffer[BUFFER_SIZE];
             strcpy(udp_buffer, name.c_str());
+
+            std::cout << "The main server sent a request to server A" << std::endl;
             int len = sendto(serverA_send_fd, udp_buffer, BUFFER_SIZE, 0,
                             (sockaddr *)&senderA_addr, sizeof(senderA_addr));
             
+            int max_serial = 0;
             while(true)
             {
                 int bytes = recvfrom(recv_fd, udp_buffer, BUFFER_SIZE, 0, (sockaddr*)&their_addr, &addr_len);
@@ -187,15 +199,28 @@ void *handle_client_request(void *p_client_socket)
                     {
                         std::cout << "decrypted record = " << record << std::endl;
                     }
+                    //TODO: store the record
                 }
                 else
                 {
+                    ss << record;
+                    ss << record;
+                    int temp_max;
+                    ss >> temp_max;
+                    if(DEBUG)
+                        std::cout << "max serial = " << max_serial << std::endl;
+                    if(temp_max > max_serial)
+                    {
+                        max_serial = temp_max;
+                    }
                     break;
                 }
             }
+            //TODO: server B & C
 
+            //TODO: now we have requested data from all 3 blocks, lets do calculations.
 
-
+            //respond to the client after all the calculations.
             std::string response = "The balance of " + name + " is XXX.";
             strcpy(buffer, response.c_str());
             send(server, buffer, BUFFER_SIZE, 0);
