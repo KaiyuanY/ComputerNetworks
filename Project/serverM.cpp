@@ -23,8 +23,8 @@ int addr_size;
 
 std::string encrypt(std::string line)
 {
-    unsigned_int pos = line.find(' ');
-    for(unsigned_int i = pos+1; i < line.size(); i++)
+    unsigned pos = line.find(' ');
+    for(unsigned i = pos+1; i < line.size(); i++)
     {
         if(line[i] == ' ')
         {
@@ -52,8 +52,8 @@ std::string encrypt(std::string line)
 
 std::string decrypt(std::string line)
 {
-    unsigned_int pos = line.find(' ');
-    for(unsigned_int i = pos+1; i < line.size(); i++)
+    unsigned pos = line.find(' ');
+    for(unsigned i = pos+1; i < line.size(); i++)
     {
         if(line[i] == ' ')
         {
@@ -112,10 +112,6 @@ void *handle_client_request(void *p_client_socket)
     sockaddr_in client_addr;
     char buffer[BUFFER_SIZE];
 
-    int serverA_send_fd;
-    int serverB_send_fd;
-    int serverC_send_fd;
-    int recv_fd;
     sockaddr_in senderA_addr, senderB_addr, senderC_addr, receiver_addr;
 
     int serverA_send_fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -125,13 +121,13 @@ void *handle_client_request(void *p_client_socket)
 
     senderA_addr.sin_family = AF_INET;
     senderA_addr.sin_port = htons(port_serverA);
-    serverA_addr.sin_addr.s_addr = INADDR_ANY;
+    senderA_addr.sin_addr.s_addr = INADDR_ANY;
     senderB_addr.sin_family = AF_INET;
     senderB_addr.sin_port = htons(port_serverB);
-    serverB_addr.sin_addr.s_addr = INADDR_ANY;
+    senderB_addr.sin_addr.s_addr = INADDR_ANY;
     senderC_addr.sin_family = AF_INET;
     senderC_addr.sin_port = htons(port_serverC);
-    serverC_addr.sin_addr.s_addr = INADDR_ANY;
+    senderC_addr.sin_addr.s_addr = INADDR_ANY;
 
     receiver_addr.sin_family = AF_INET;
     receiver_addr.sin_port = htons(port_udp_out);
@@ -139,7 +135,7 @@ void *handle_client_request(void *p_client_socket)
 
     bind(recv_fd, (sockaddr*)&receiver_addr, sizeof(receiver_addr));
 
-    socklen_t len = 0;
+    socklen_t addr_len = 0;
     sockaddr_in their_addr;
 
     while(true)
