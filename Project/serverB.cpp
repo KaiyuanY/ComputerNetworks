@@ -10,6 +10,11 @@
 #include <sstream>
 #include <cstring>
 
+#include <sys/wait.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <stdio.h>
+
 #define BUFFER_SIZE 1024
 #define BLOCK_FILE "block2.txt"
 #define LOCAL_PORT 22080

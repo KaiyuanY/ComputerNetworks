@@ -9,6 +9,10 @@
 #include <netdb.h>
 #include <cstring>
 
+#include <sys/wait.h>
+#include <errno.h>
+#include <stdio.h>
+
 #define BUFFER_SIZE 1024
 #define SERVER_PORT 25080
 

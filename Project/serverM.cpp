@@ -13,6 +13,11 @@
 #include <fstream>
 #include <cstring>
 
+#include <sys/wait.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <stdio.h>
+
 #define BUFFER_SIZE 1024
 #define DEBUG false
 #define PORT_UDP_M 24080
