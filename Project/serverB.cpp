@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <cstring>
 
 #define BUFFER_SIZE 1024
 #define BLOCK_FILE "block2.txt"

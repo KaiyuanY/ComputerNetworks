@@ -29,3 +29,5 @@
 29 Luke Martin 15
 30 Luke Martin 5
 31 Luke Martin 10
+32 Martin Chinmay 100
+33 Martin Chinmay 100

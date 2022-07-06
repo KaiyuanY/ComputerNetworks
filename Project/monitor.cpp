@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <netdb.h>
+#include <cstring>
 
 #define BUFFER_SIZE 1024
 #define SERVER_PORT 26080

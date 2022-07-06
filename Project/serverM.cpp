@@ -11,6 +11,7 @@
 #include <vector>
 #include <algorithm>
 #include <fstream>
+#include <cstring>
 
 #define BUFFER_SIZE 1024
 #define DEBUG false
