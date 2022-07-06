@@ -9,12 +9,11 @@
 #include <netdb.h>
 
 #define BUFFER_SIZE 1024
+#define SERVER_PORT 25080
 
 int main(int argc, char* argv[])
 {
     srand(time(0));
-    int port = 20000 + rand() %100;
-    int server_port = 25080;
 
     int client;
     char buffer[BUFFER_SIZE];
@@ -28,12 +27,12 @@ int main(int argc, char* argv[])
     }
 
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(server_port);
+    server_addr.sin_port = htons(SERVER_PORT);
     inet_pton(AF_INET, server_ip.c_str(), &server_addr.sin_addr);
 
     if (connect(client,(sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
-        std::cout << "failed to connect to the server on port " << server_port << std::endl;
+        std::cout << "failed to connect to the server on port " << SERVER_PORT << std::endl;
     }
 
     //the connection is succesful, lets send data.
@@ -63,8 +62,10 @@ int main(int argc, char* argv[])
         strcpy(buffer, msg.c_str());
         send(client, buffer, BUFFER_SIZE, 0);
         recv(client, buffer, BUFFER_SIZE, 0);
-        std::string msg_recv (buffer);
-        
+        std::string data_recv (buffer);
+        std::cout << data_recv << std::endl;
+        close(client);
+        return 2;
     }
     else {
         //unrecognized argc

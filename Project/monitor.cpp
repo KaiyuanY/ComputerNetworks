@@ -1,20 +1,70 @@
-// monitor.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
-
 #include <iostream>
+#include <string>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <cstdlib>
+#include <unistd.h>
+#include <netdb.h>
 
-int main()
+#define BUFFER_SIZE 1024
+#define SERVER_PORT 26080
+
+int main(int argc, char* argv[])
 {
-    std::cout << "Hello World!\n";
+    srand(time(0));
+
+    int client;
+    char buffer[BUFFER_SIZE];
+    std::string server_ip = "127.0.0.1";
+
+    sockaddr_in server_addr;
+    client = socket(AF_INET, SOCK_STREAM, 0);
+    if(client < 0)
+    {
+        std::cout << "failed to create socket." << std::endl;
+        return -1;
+    }
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(SERVER_PORT);
+    inet_pton(AF_INET, server_ip.c_str(), &server_addr.sin_addr);
+
+    if (connect(client,(sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+    {
+        std::cout << "failed to connect to the server on port " << SERVER_PORT << std::endl;
+        return -2;
+    }
+
+    //the connection is succesful, lets send data.
+    std::cout << "The monitor is up and running." << std::endl;
+    if(argc != 2)
+    {
+        std::cout << "wrong number of arguents." << std::endl;
+        return -3;
+    }
+
+    std::string arg = argv[1];
+    if(arg != "TXLIST")
+    {
+        std::cout << "unrecognized command line argiment." << std::endl;
+        return -4;
+    }
+
+    strcpy(buffer, arg.c_str());
+    send(client, buffer, BUFFER_SIZE, 0);
+    std::cout << "Monitor sent a sorted list request to the main server." << std::endl;
+
+    recv(client, buffer, BUFFER_SIZE, 0);
+    std::string response(buffer);
+    if(response == "SUCCESS")
+    {
+        std::cout << "Successfully received a sorted list of transactions from the main server." << std::endl;
+        return 1;
+    }
+    
+    return 0;
 }
 
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
 
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file

@@ -56,16 +56,37 @@ int main()
         std::cout << "The ServerA received a request from the Main Server." << std::endl;
 
         std::string query(buffer);
+
         if(query == "TXLIST")
         {
-            //TODO: TXLIST send everything back
+            //TXLIST: send everything back
+            std::ifstream block_file(BLOCK_FILE);
+            std::string line;
+            char send_buffer[BUFFER_SIZE];
+            if(block_file.is_open())
+            {
+                while(getline(block_file, line))
+                {
+                    strcpy(send_buffer, line.c_str());
+                    int len = sendto(sender_fd, send_buffer, BUFFER_SIZE, 0,
+                            (sockaddr *)&sender_addr, sizeof(sender_addr));
+                    if(len < 0)
+                    {
+                        std::cout << "Server: udp send failed." << std::endl;
+                    }
+                }
+                block_file.close();
+            }
+            std::string last_line = "# 0";
+            strcpy(send_buffer, last_line.c_str());
+            int len = sendto(sender_fd, send_buffer, BUFFER_SIZE, 0,
+                    (sockaddr *)&sender_addr, sizeof(sender_addr));
         }
-        else if(query[0] >= '0' && query[0] <= '9')//it is a new transaction
+        else if(query[0] >= '0' && query[0] <= '9')//it is a new transaction, append to block file
         {
             std::ofstream outfile(BLOCK_FILE, std::ios_base::app);
             outfile << query << std::endl;
             outfile.close();
-            //TODO: send confirmation to server M 
             
         }
         else//send all records of the requested person
@@ -85,8 +106,11 @@ int main()
                     {
                         max_serial = serial;
                     }
+                    std::string name1, name2;
+                    ss >> name1;
+                    ss >> name2;
 
-                    if(line.find(query) != std::string::npos)//found a matching record
+                    if(name1 == query || name2 == query)//found a matching record
                     {
                         char send_buffer[BUFFER_SIZE];
                         strcpy(send_buffer, line.c_str());

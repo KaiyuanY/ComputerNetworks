@@ -9,15 +9,24 @@
 #include <pthread.h>
 #include <sstream>
 #include <vector>
-#include <unordered_map>
+#include <algorithm>
+#include <fstream>
 
 #define BUFFER_SIZE 1024
-#define DEBUG true
+#define DEBUG false
+#define PORT_UDP_M 24080
+#define PORT_SERVER_A 21080
+#define PORT_SERVER_B 22080
+#define PORT_SERVER_C 23080
+#define PORT_CLIENT_LOCAL 25080
+#define PORT_MONITOR_LOCAL 26080
+
 int client, monitor;
-int port_client_local = 25080;
-int port_monitor_local = 26080;
-int port_udp_out = 24080;
-int port_serverA = 21080, port_serverB = 22080, port_serverC = 23080;
+sockaddr_in senderA_addr, senderB_addr, senderC_addr, receiver_addr;
+int serverA_send_fd;
+int serverB_send_fd;
+int serverC_send_fd;
+int recv_fd;
 int addr_size;
 
 struct Transaction
@@ -26,13 +35,13 @@ struct Transaction
     std::string from;
     std::string to;
     int amount;
-}
+};
 
 
 std::string encrypt(std::string line)
 {
-    unsigned pos = line.find(' ');
-    for(unsigned i = pos+1; i < line.size(); i++)
+    //unsigned pos = line.find(' ');
+    for(unsigned i = 0; i < line.size(); i++)
     {
         if(line[i] == ' ')
         {
@@ -60,8 +69,8 @@ std::string encrypt(std::string line)
 
 std::string decrypt(std::string line)
 {
-    unsigned pos = line.find(' ');
-    for(unsigned i = pos+1; i < line.size(); i++)
+    //unsigned pos = line.find(' ');
+    for(unsigned i = 0; i < line.size(); i++)
     {
         if(line[i] == ' ')
         {
@@ -73,7 +82,7 @@ std::string decrypt(std::string line)
             int change = line[i] - 'a' - 3;
             if(change < 0)
             {
-                line[i] = 'z' + change;
+                line[i] = 'z' + change + 1;
             }
             else
             {
@@ -85,7 +94,7 @@ std::string decrypt(std::string line)
             int change = line[i] - 'A' - 3;
             if(change < 0)
             {
-                line[i] = 'Z' + change;
+                line[i] = 'Z' + change + 1;
             }
             else
             {
@@ -97,7 +106,7 @@ std::string decrypt(std::string line)
             int change = line[i] - '0' - 3;
             if(change < 0)
             {
-                line[i] = '9' + change;
+                line[i] = '9' + change + 1;
             }
             else
             {
@@ -112,6 +121,121 @@ std::string decrypt(std::string line)
     return line;
 }
 
+int pull_from_back_server(int &send_fd, sockaddr_in &sender_addr, int &recv_fd, std::string name, std::vector<Transaction*> &records)
+{
+    int max_serial = 0;
+    socklen_t addr_len = 0;
+    sockaddr_in their_addr;
+    char udp_buffer[BUFFER_SIZE];
+    std::string encrypted_name;
+    if(name != "TXLIST")
+    {
+        encrypted_name = encrypt(name);
+    }
+    else
+    {
+        encrypted_name = name;
+    }
+    strcpy(udp_buffer, encrypted_name.c_str());
+
+    
+    int len = sendto(send_fd, udp_buffer, BUFFER_SIZE, 0,
+                    (sockaddr *)&sender_addr, sizeof(sender_addr));
+    
+    
+    while(true)
+    {
+        int bytes = recvfrom(recv_fd, udp_buffer, BUFFER_SIZE, 0, (sockaddr*)&their_addr, &addr_len);
+        std::string record(udp_buffer);
+        if(record[0] != '#')
+        {
+            if(DEBUG)
+            {
+                std::cout << "encrypted record = " << record << std::endl;
+            }
+            //store the record
+            std::stringstream ss (record);
+            Transaction* t = new Transaction;
+            ss >> t->id;
+            std::string from, to, amount;
+            ss >> from;
+            ss >> to;
+            ss >> amount;
+
+            t->from = decrypt(from);
+            t->to = decrypt(to);
+            amount = decrypt(amount);
+            t->amount = std::stoi(amount);
+            records.push_back(t);
+
+            if(DEBUG)
+                std::cout << "id=" << t->id << ",from=" << t->from << ",to=" << t->to << ",amount=" << t->amount << std::endl;
+        }
+        else //last entry, which only contains the max serial number of the block
+        {
+            std::stringstream ss;
+            ss << record;
+            std::string trash;
+            ss >> trash;
+            ss << record;
+            int temp_max;
+            ss >> temp_max;
+            
+            if(temp_max > max_serial)
+            {
+                max_serial = temp_max;
+            }
+            if(DEBUG)
+                std::cout << "max serial = " << max_serial << std::endl;
+            break;
+        }
+    }
+    return max_serial;
+}
+
+int calculate_balance(std::vector<Transaction*> records_A, std::vector<Transaction*> records_B, std::vector<Transaction*> records_C,
+                        std::string name)
+{
+    int total = 1000;
+    for(auto trans : records_A)
+    {
+        if(trans->from == name)
+        {
+            total -= trans->amount;
+        }
+        else
+        {
+            total += trans->amount;
+        }
+        delete trans;
+    }
+    for(auto trans : records_B)
+    {
+        if(trans->from == name)
+        {
+            total -= trans->amount;
+        }
+        else
+        {
+            total += trans->amount;
+        }
+        delete trans;
+    }
+    for(auto trans : records_C)
+    {
+        if(trans->from == name)
+        {
+            total -= trans->amount;
+        }
+        else
+        {
+            total += trans->amount;
+        }
+        delete trans;
+    }
+    return total;
+}
+
 void *handle_client_request(void *p_client_socket)
 {
 
@@ -121,42 +245,16 @@ void *handle_client_request(void *p_client_socket)
     sockaddr_in client_addr;
     char buffer[BUFFER_SIZE];
 
-    sockaddr_in senderA_addr, senderB_addr, senderC_addr, receiver_addr;
-
-    int serverA_send_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    int serverB_send_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    int serverC_send_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    int recv_fd = socket(AF_INET, SOCK_DGRAM, 0);
-
-    senderA_addr.sin_family = AF_INET;
-    senderA_addr.sin_port = htons(port_serverA);
-    senderA_addr.sin_addr.s_addr = INADDR_ANY;
-    senderB_addr.sin_family = AF_INET;
-    senderB_addr.sin_port = htons(port_serverB);
-    senderB_addr.sin_addr.s_addr = INADDR_ANY;
-    senderC_addr.sin_family = AF_INET;
-    senderC_addr.sin_port = htons(port_serverC);
-    senderC_addr.sin_addr.s_addr = INADDR_ANY;
-
-    receiver_addr.sin_family = AF_INET;
-    receiver_addr.sin_port = htons(port_udp_out);
-    receiver_addr.sin_addr.s_addr = INADDR_ANY;
-
-    bind(recv_fd, (sockaddr*)&receiver_addr, sizeof(receiver_addr));
-
     socklen_t addr_len = 0;
     sockaddr_in their_addr;
 
     while(true)
     {
-        unordered_map<int, Transaction> transactions;//or vector of transactions?
                 
         int size = sizeof(sockaddr_in);
         int server = accept(client_socket, (sockaddr *)&client_addr, (socklen_t*)&size);
 
         recv(server, buffer, BUFFER_SIZE, 0);
-
-        std::cout << buffer << std::endl;
         
         std::string data (buffer);
         std::stringstream ss(data);
@@ -165,78 +263,170 @@ void *handle_client_request(void *p_client_socket)
         ss >> word;
         if(word == "B")//check balance
         {
+            std::vector<Transaction*> records_A;
+            std::vector<Transaction*> records_B;
+            std::vector<Transaction*> records_C;
+            int max_serial = 0;
             std::string name;
             ss >> name;
             //pull the balance from back servers.
             
             std::cout << "The main server received input=" << name <<
-                " from the client using TCP over port " << port_client_local << std::endl;
-
-
-            name = encrypt(name);
-            if(DEBUG)
-            {
-                std::cout << "encrypted name = " << name << std::endl;
-            }
-
-            //server A
-            char udp_buffer[BUFFER_SIZE];
-            strcpy(udp_buffer, name.c_str());
-
-            std::cout << "The main server sent a request to server A" << std::endl;
-            int len = sendto(serverA_send_fd, udp_buffer, BUFFER_SIZE, 0,
-                            (sockaddr *)&senderA_addr, sizeof(senderA_addr));
+                " from the client using TCP over port " << PORT_CLIENT_LOCAL << std::endl;
             
-            int max_serial = 0;
-            while(true)
+
+
+            //int pull_from_back_server(int &send_fd, sockaddr_in &sender_addr, int &recv_fd, std::string name, std::vector<Transaction*> &records)
+            std::cout << "The main server sent a request to server A" << std::endl;
+            int max_serial_A = pull_from_back_server(serverA_send_fd, senderA_addr, recv_fd, name, records_A);
+            std::cout << "The main server received transactions from Server A using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+            std::cout << "The main server sent a request to server B" << std::endl;
+            int max_serial_B = pull_from_back_server(serverB_send_fd, senderB_addr, recv_fd, name, records_B);
+            std::cout << "The main server received transactions from Server B using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+            std::cout << "The main server sent a request to server C" << std::endl;
+            int max_serial_C = pull_from_back_server(serverC_send_fd, senderC_addr, recv_fd, name, records_C);
+            std::cout << "The main server received transactions from Server C using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+            // int max_serial = max(max_serial_A, max(max_serial_B, max_serial_C));
+
+            //now we have requested data from all 3 blocks, lets do calculations.
+            if(records_A.size() == 0 && records_B.size() == 0 && records_C.size() == 0)
             {
-                int bytes = recvfrom(recv_fd, udp_buffer, BUFFER_SIZE, 0, (sockaddr*)&their_addr, &addr_len);
-                std::string record(udp_buffer);
-                if(record[0] != '#')
-                {
-                    record = decrypt(record);
-                    if(DEBUG)
-                    {
-                        std::cout << "decrypted record = " << record << std::endl;
-                    }
-                    //TODO: store the record
-                }
-                else
-                {
-                    ss << record;
-                    ss << record;
-                    int temp_max;
-                    ss >> temp_max;
-                    if(DEBUG)
-                        std::cout << "max serial = " << max_serial << std::endl;
-                    if(temp_max > max_serial)
-                    {
-                        max_serial = temp_max;
-                    }
-                    break;
-                }
+                std::string response = "Unable to proceed with the transaction as " + name + " is not part of the network.";
+                strcpy(buffer, response.c_str());
+                send(server, buffer, BUFFER_SIZE, 0);
+                close(server);
+                continue;
             }
-            //TODO: server B & C
 
-            //TODO: now we have requested data from all 3 blocks, lets do calculations.
-
+            //calculations
+            int balance = calculate_balance(records_A, records_B, records_C, name);
+            
             //respond to the client after all the calculations.
-            std::string response = "The balance of " + name + " is XXX.";
+            std::string response = "The current balance of " + name + " is : " + std::to_string(balance) + " txcoins.";
             strcpy(buffer, response.c_str());
             send(server, buffer, BUFFER_SIZE, 0);
+
+            std::cout << "The main server sent the current balance to the client." << std::endl;
             close(server);
         }
         else//transfer
         {
+            //transfer info from client
             std::string from, to, amount;
             ss >> from;
             ss >> to;
             ss >> amount;
+            std::cout << "The main server received from "+ from +" to transfer "+ amount 
+                        + " coins to "+ to +" using TCP over port " + std::to_string(PORT_CLIENT_LOCAL) + "." << std::endl;
             //do something with the transfer
+            std::vector<Transaction*> records_A_from, records_A_to;
+            std::vector<Transaction*> records_B_from, records_B_to;
+            std::vector<Transaction*> records_C_from, records_C_to;
 
-            std::string response = "transfered " + amount + " from " + from + " to " + to;
+            std::cout << "The main server sent a request to server A" << std::endl;
+            int max_serial_A = pull_from_back_server(serverA_send_fd, senderA_addr, recv_fd, from, records_A_from);
+            pull_from_back_server(serverA_send_fd, senderA_addr, recv_fd, to, records_A_to);
+            std::cout << "The main server received transactions from Server A using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+            std::cout << "The main server sent a request to server B" << std::endl;
+            int max_serial_B = pull_from_back_server(serverB_send_fd, senderB_addr, recv_fd, from, records_B_from);
+            pull_from_back_server(serverB_send_fd, senderB_addr, recv_fd, to, records_B_to);
+            std::cout << "The main server received transactions from Server B using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+            std::cout << "The main server sent a request to server C" << std::endl;
+            int max_serial_C = pull_from_back_server(serverC_send_fd, senderC_addr, recv_fd, from, records_C_from);
+            pull_from_back_server(serverC_send_fd, senderC_addr, recv_fd, to, records_C_to);
+            std::cout << "The main server received transactions from Server C using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+            if(DEBUG)
+            {
+                std::cout << "******records_A_from's size = " << records_A_from.size() << std::endl;
+                std::cout << "******records_A_to's size = " << records_A_to.size() << std::endl;
+                std::cout << "******records_B_from's size = " << records_B_from.size() << std::endl;
+                std::cout << "******records_B_to's size = " << records_A_to.size() << std::endl;
+                std::cout << "******records_C_from's size = " << records_C_from.size() << std::endl;
+                std::cout << "******records_C_to's size = " << records_C_to.size() << std::endl;
+            }
+            //check if both are part of the network
+            if(records_A_from.size() == 0 && records_B_from.size() == 0 && records_C_from.size() == 0
+                && records_A_to.size() == 0 && records_B_to.size() == 0 && records_C_to.size() == 0)
+            {
+                std::string response = "Unable to proceed with the transaction as " + from + " and " + to + " are not part of the network.";
+                strcpy(buffer, response.c_str());
+                send(server, buffer, BUFFER_SIZE, 0);
+                close(server);
+                std::cout << "The main server sent the result of the transaction to the client." << std::endl;
+                continue;
+            }
+            else if(records_A_from.size() == 0 && records_B_from.size() == 0 && records_C_from.size() == 0)
+            {
+                std::string response = "Unable to proceed with the transaction as " + from + " is not part of the network.";
+                strcpy(buffer, response.c_str());
+                send(server, buffer, BUFFER_SIZE, 0);
+                close(server);
+                std::cout << "The main server sent the result of the transaction to the client." << std::endl;
+                continue;
+            }
+            else if(records_A_to.size() == 0 && records_B_to.size() == 0 && records_C_to.size() == 0)
+            {
+                std::string response = "Unable to proceed with the transaction as " + to + " is not part of the network.";
+                strcpy(buffer, response.c_str());
+                send(server, buffer, BUFFER_SIZE, 0);
+                close(server);
+                std::cout << "The main server sent the result of the transaction to the client." << std::endl;
+                continue;
+            }
+
+            //both people exist in the network, now check sender's balance 
+            int balance = calculate_balance(records_A_from, records_B_from, records_C_from, from);
+            int remainder = balance - std::stoi(amount);
+            if(remainder < 0)//insufficient balance
+            {
+                std::string response = from + " was unable to transfer " + amount 
+                                        + " txcoins to " + to + " because of insufficient balance.\nThe current balance of " 
+                                        + from + " is " + std::to_string(balance); 
+                strcpy(buffer, response.c_str());
+                send(server, buffer, BUFFER_SIZE, 0);
+                std::cout << "The main server sent the result of the transaction to the client." << std::endl;
+                close(server);
+                continue;
+            }
+
+            //if everything is fine, continue to transfer.
+            int max_serial = std::max(max_serial_A, std::max(max_serial_B, max_serial_C));
+            std::string new_record;
+            new_record = std::to_string(max_serial + 1) + " " + encrypt(from) + " " + encrypt(to) + " " + encrypt(amount);
+            
+            char udp_buffer[BUFFER_SIZE];
+            strcpy(udp_buffer, new_record.c_str());
+            int rand_server = 1 + (rand() % 3);
+            if(rand_server == 1)//server A
+            {
+                int len = sendto(serverA_send_fd, udp_buffer, BUFFER_SIZE, 0,
+                    (sockaddr *)&senderA_addr, sizeof(senderA_addr));
+            }
+            else if(rand_server == 2)//server B
+            {
+                int len = sendto(serverB_send_fd, udp_buffer, BUFFER_SIZE, 0,
+                    (sockaddr *)&senderB_addr, sizeof(senderB_addr));
+            }
+            else //server C
+            {
+                int len = sendto(serverC_send_fd, udp_buffer, BUFFER_SIZE, 0,
+                    (sockaddr *)&senderC_addr, sizeof(senderC_addr));
+            }
+
+            if(DEBUG)
+                std::cout << "new record was sent to server " << rand_server << std::endl;
+
+            std::string response = from + " successfully transferred " + amount + " txcoins to " + to 
+                                    + ".\nThe current balance of " + from + " is: " + std::to_string(remainder) + " txcoins.";
             strcpy(buffer, response.c_str());
             send(server, buffer, BUFFER_SIZE, 0);
+            std::cout << "The main server sent the result of the transaction to the client." << std::endl;
             close(server);
         }
 
@@ -281,19 +471,41 @@ int main()
 
     addr_size = sizeof(sockaddr_in);
 
-    client = setup_socket(port_client_local);
+    client = setup_socket(PORT_CLIENT_LOCAL);
     if(client < 0)
     {
         std::cout << "client socket failed." << std::endl;
         return -1;
     }
-    monitor = setup_socket(port_monitor_local);
+    monitor = setup_socket(PORT_MONITOR_LOCAL);
     if(monitor < 0)
     {
         std::cout << "monitor socket failed." << std::endl;
         return -2;
     }
     std::cout << "The main server is up and running." << std::endl;
+
+    //udp connection setup
+    serverA_send_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    serverB_send_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    serverC_send_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    recv_fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    senderA_addr.sin_family = AF_INET;
+    senderA_addr.sin_port = htons(PORT_SERVER_A);
+    senderA_addr.sin_addr.s_addr = INADDR_ANY;
+    senderB_addr.sin_family = AF_INET;
+    senderB_addr.sin_port = htons(PORT_SERVER_B);
+    senderB_addr.sin_addr.s_addr = INADDR_ANY;
+    senderC_addr.sin_family = AF_INET;
+    senderC_addr.sin_port = htons(PORT_SERVER_C);
+    senderC_addr.sin_addr.s_addr = INADDR_ANY;
+
+    receiver_addr.sin_family = AF_INET;
+    receiver_addr.sin_port = htons(PORT_UDP_M);
+    receiver_addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(recv_fd, (sockaddr*)&receiver_addr, sizeof(receiver_addr));
 
     //handle client connection in a different thread
     pthread_t t_client;
@@ -304,7 +516,72 @@ int main()
     //handle monitor connection
     while(true)
     {
-        sleep(5);
+        char buffer[BUFFER_SIZE];
+        std::vector<Transaction*> records_A;
+        std::vector<Transaction*> records_B;
+        std::vector<Transaction*> records_C;
+        std::vector<Transaction*> records_combined;
+        int max_serial = 0;
+        int size = sizeof(sockaddr_in);
+        sockaddr_in monitor_addr;
+
+        //get monitor connection
+        int server = accept(monitor, (sockaddr *)&monitor_addr, (socklen_t*)&size);
+
+        recv(server, buffer, BUFFER_SIZE, 0);
+        std::string data (buffer);
+
+        if(data != "TXLIST")
+        {
+            std::cout << "unrecognized monitor input." << std::endl;
+        }
+        std::cout << "The main server received a sorted list request from the monitor using TCP over port " 
+                    << PORT_MONITOR_LOCAL << "." << std::endl;
+
+        std::cout << "The main server sent a request to server A" << std::endl;
+        int max_serial_A = pull_from_back_server(serverA_send_fd, senderA_addr, recv_fd, data, records_A);
+        std::cout << "The main server received transactions from Server A using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+        std::cout << "The main server sent a request to server B" << std::endl;
+        int max_serial_B = pull_from_back_server(serverB_send_fd, senderB_addr, recv_fd, data, records_B);
+        std::cout << "The main server received transactions from Server B using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+        std::cout << "The main server sent a request to server C" << std::endl;
+        int max_serial_C = pull_from_back_server(serverC_send_fd, senderC_addr, recv_fd, data, records_C);
+        std::cout << "The main server received transactions from Server C using UDP over port " << PORT_UDP_M << "." << std::endl;
+
+        if(DEBUG)
+            std::cout << "Transactions vector size = " << records_combined.size() << std::endl;
+        //combine results from 3 servers
+        for(auto trans : records_A)
+        {
+            records_combined.push_back(trans);
+        }
+        for(auto trans : records_B)
+        {
+            records_combined.push_back(trans);
+        }
+        for(auto trans : records_C)
+        {
+            records_combined.push_back(trans);
+        }
+        //sort the list and print it to file
+        std::sort(records_combined.begin(), records_combined.end(), [](const Transaction* lhs, const Transaction* rhs) {
+            return lhs->id < rhs->id;
+        });
+        std::ofstream txlist_file("txchain.txt");
+        for(auto trans : records_combined)
+        {
+            txlist_file << trans->id << " " << trans->from << " " << trans->to << " " << trans->amount << std::endl;
+            delete trans;
+        }
+        txlist_file.close();
+
+        std::string response = "SUCCESS";
+        strcpy(buffer, response.c_str());
+        send(server, buffer, BUFFER_SIZE, 0);
+
+        std::cout << "The main server sent the result of the transaction to the client." << std::endl;
     }
 
     return 0;
